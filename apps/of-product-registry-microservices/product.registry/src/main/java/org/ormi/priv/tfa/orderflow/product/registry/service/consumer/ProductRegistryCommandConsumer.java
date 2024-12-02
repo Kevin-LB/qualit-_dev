@@ -17,12 +17,23 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
+/**
+ * Consommateur de commandes pour le registre des produits.
+ * Cette classe gère les messages de commande liés au registre des produits en 
+ * les traitant et en produisant des événements correspondants.
+ */
 @ApplicationScoped
 public class ProductRegistryCommandConsumer {
 
+  /**
+   * The Product registry service.
+   */
   @Inject
   private ProductRegistryService productRegistryService;
 
+  /**
+   * The Product registry event producer.
+   */
   @Inject
   private ProductRegistryEventEmitter eventProducer;
 

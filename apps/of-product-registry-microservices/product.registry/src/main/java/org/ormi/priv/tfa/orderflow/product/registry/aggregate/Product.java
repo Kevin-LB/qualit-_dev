@@ -59,6 +59,11 @@ public class Product {
     return productDescription;
   }
 
+  /**
+   * Retourne une représentation sous forme de chaîne de l'objet Product.
+   *
+   * @return une chaîne contenant les informations sur le produit.
+   */
   @Override
   public String toString() {
     return "Product{" +
@@ -68,6 +73,12 @@ public class Product {
       '}';
   }
 
+  /**
+   * Vérifie si deux objets Product sont égaux en se basant sur leur identifiant.
+   *
+   * @param o l'objet à comparer.
+   * @return {@code true} si les deux objets ont le même identifiant de produit, sinon {@code false}.
+   */
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
@@ -77,6 +88,11 @@ public class Product {
     return productId.equals(other.productId);
   }
 
+  /**
+   * Calcule le hash code basé sur l'identifiant du produit.
+   *
+   * @return le hash code du produit.
+   */
   @Override
   public int hashCode() {
     return productId.hashCode();
