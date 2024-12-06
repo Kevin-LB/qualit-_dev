@@ -12,6 +12,9 @@ import org.ormi.priv.tfa.orderflow.lib.publishedlanguage.event.ProductRegistryEv
 import org.ormi.priv.tfa.orderflow.lib.publishedlanguage.event.ProductRemoved;
 import org.ormi.priv.tfa.orderflow.lib.publishedlanguage.event.ProductUpdated;
 import org.ormi.priv.tfa.orderflow.lib.publishedlanguage.event.config.ProductRegistryEventChannelName;
+import org.ormi.priv.tfa.orderflow.product.registry.exception.ConsumerCreationException;
+import org.ormi.priv.tfa.orderflow.product.registry.exception.ProducerCreationException;
+import org.ormi.priv.tfa.orderflow.product.registry.exception.ProductRegistryEventException;
 
 import io.quarkus.logging.Log;
 import io.smallrye.reactive.messaging.pulsar.PulsarClientService;
@@ -42,8 +45,9 @@ public class ProductRegistryEventEmitter {
    * Project the event.
    * 
    * @param event - the event to project
+   * @throws ProductRegistryEventException if an error occurs while projecting the event
    */
-  public void emit(ProductRegistryEvent event) throws IllegalStateException {
+  public void emit(ProductRegistryEvent event) throws ProductRegistryEventException {
     Log.debug("Projecting event: " + event.toString());
     if (event instanceof ProductRegistered registered) {
       emitRegisteredProduct(registered);
@@ -58,27 +62,42 @@ public class ProductRegistryEventEmitter {
    * Emit a product registered event.
    * 
    * @param registered - the event to emit
+   * @throws ProductRegistryEventException if an error occurs while emitting the event
    */
-  void emitRegisteredProduct(ProductRegistered registered) throws IllegalStateException {
-    eventEmitter.send(registered);
+  void emitRegisteredProduct(ProductRegistered registered) throws ProductRegistryEventException {
+    try {
+      eventEmitter.send(registered);
+    } catch (Exception e) {
+      throw new ProductRegistryEventException("Failed to emit registered product event.", e);
+    }
   }
 
   /**
    * Emit a product updated event.
    * 
    * @param updated - the event to emit
+   * @throws ProductRegistryEventException if an error occurs while emitting the event
    */
-  void projectUpdatedProduct(ProductUpdated updated) throws IllegalStateException {
-    eventEmitter.send(updated);
+  void projectUpdatedProduct(ProductUpdated updated) throws ProductRegistryEventException {
+    try {
+      eventEmitter.send(updated);
+    } catch (Exception e) {
+      throw new ProductRegistryEventException("Failed to emit updated product event.", e);
+    }
   }
 
   /**
    * Emit a product removed event.
    * 
    * @param removed - the event to project
+   * @throws ProductRegistryEventException if an error occurs while emitting the event
    */
-  void emitRemovedProduct(ProductRemoved removed) throws IllegalStateException {
-    eventEmitter.send(removed);
+  void emitRemovedProduct(ProductRemoved removed) throws ProductRegistryEventException {
+    try {
+      eventEmitter.send(removed);
+    } catch (Exception e) {
+      throw new ProductRegistryEventException("Failed to emit removed product event.", e);
+    }
   }
 
   /**
@@ -86,27 +105,29 @@ public class ProductRegistryEventEmitter {
    * 
    * @param correlationId - the correlation id
    * @param event         - the event
+   * @throws ProductRegistryEventException if an error occurs while producing the event
    */
-  public void sink(String correlationId, ProductRegistryEvent event) {
-    // Get the producer for the correlation id
+  public void sink(String correlationId, ProductRegistryEvent event) throws ProductRegistryEventException {
     getEventSinkByCorrelationId(correlationId)
         .thenAccept((producer) -> {
-          // Sink the event
-          producer
-              .newMessage()
-              .value(event)
-              .sendAsync()
-              .whenComplete((msgId, ex) -> {
-                if (ex != null) {
-                  throw new RuntimeException("Failed to produce event for correlation id: " + correlationId, ex);
-                }
-                Log.debug(String.format("Sinked event with correlation id{%s} in msg{%s}", correlationId, msgId));
-                try {
-                  producer.close();
-                } catch (PulsarClientException e) {
-                  throw new RuntimeException("Failed to close producer", e);
-                }
-              });
+          try {
+            producer.newMessage()
+                    .value(event)
+                    .sendAsync()
+                    .whenComplete((msgId, ex) -> {
+                      if (ex != null) {
+                        throw new ProducerCreationException("Failed to produce event for correlation id: " + correlationId, ex);
+                      }
+                      Log.debug(String.format("Sinked event with correlation id{%s} in msg{%s}", correlationId, msgId));
+                      try {
+                        producer.close();
+                      } catch (PulsarClientException e) {
+                        throw new ProducerCreationException("Failed to close producer", e);
+                      }
+                    });
+          } catch (Exception ex) {
+            throw new ProducerCreationException("Error while sending event.", ex);
+          }
         });
   }
 
@@ -115,19 +136,22 @@ public class ProductRegistryEventEmitter {
    * 
    * @param correlationId - the correlation id
    * @return the producer
+   * @throws ProducerCreationException if an error occurs while creating the producer
    */
-  private CompletionStage<Producer<ProductRegistryEvent>> getEventSinkByCorrelationId(String correlationId) {
-    // Define the channel name, topic and schema definition
+  private CompletionStage<Producer<ProductRegistryEvent>> getEventSinkByCorrelationId(String correlationId) throws ProducerCreationException {
     final String channelName = ProductRegistryEventChannelName.PRODUCT_REGISTRY_EVENT.toString();
     final String topic = channelName + "-" + correlationId;
-    // Create and return the producer
-    return pulsarClients.getClient(channelName)
-        .newProducer(Schema.JSON(ProductRegistryEvent.class))
-        .producerName(topic)
-        .topic(topic)
-        .createAsync()
-        .exceptionally(ex -> {
-          throw new RuntimeException("Failed to create producer for correlation id: " + correlationId, ex);
-        });
+    try {
+      return pulsarClients.getClient(channelName)
+          .newProducer(Schema.JSON(ProductRegistryEvent.class))
+          .producerName(topic)
+          .topic(topic)
+          .createAsync()
+          .exceptionally(ex -> {
+            throw new ProducerCreationException("Failed to create producer for correlation id: " + correlationId, ex);
+          });
+    } catch (Exception ex) {
+      throw new ProducerCreationException("Error creating producer.", ex);
+    }
   }
 }
